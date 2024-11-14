@@ -975,7 +975,7 @@ class Mixin1D:
 class Mixin3D:
     """Additional methods to add to 3D Shape classes"""
 
-    def fillet(self, radius: float, edge_list: Iterable[Edge]) -> Self:
+    def fillet(self, radius: float, edge_list: Iterable[Edge], mutate = False) -> Self:
         """Fillet
 
         Fillets the specified edges of this solid.
@@ -983,6 +983,7 @@ class Mixin3D:
         Args:
             radius (float): float > 0, the radius of the fillet
             edge_list (Iterable[Edge]): a list of Edge objects, which must belong to this solid
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
             Any: Filleted solid
@@ -995,7 +996,8 @@ class Mixin3D:
             fillet_builder.Add(radius, native_edge)
 
         try:
-            new_shape = self.__class__(fillet_builder.Shape())
+            occt_shape = fillet_builder.Shape()
+            new_shape = self.update_object(occt_shape) if mutate else self.__class__(occt_shape)
             if not new_shape.is_valid():
                 raise Standard_Failure
         except (StdFail_NotDone, Standard_Failure) as err:
@@ -1088,6 +1090,7 @@ class Mixin3D:
         length2: Optional[float],
         edge_list: Iterable[Edge],
         face: Face = None,
+        mutate = False,
     ) -> Self:
         """Chamfer
 
@@ -1101,6 +1104,7 @@ class Mixin3D:
                 this solid
             face (Face): identifies the side where length is measured. The edge(s) must be
                 part of the face
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
             Self:  Chamfered solid
@@ -1138,7 +1142,8 @@ class Mixin3D:
             )  # NB: edge_face_map return a generic TopoDS_Shape
 
         try:
-            new_shape = self.__class__(chamfer_builder.Shape())
+            occt_shape = chamfer_builder.Shape()
+            new_shape = self.update_object(occt_shape) if mutate else self.__class__(occt_shape)
             if not new_shape.is_valid():
                 raise Standard_Failure
         except (StdFail_NotDone, Standard_Failure) as err:
@@ -1249,6 +1254,7 @@ class Mixin3D:
         thickness: float,
         tolerance: float = 0.0001,
         kind: Kind = Kind.ARC,
+        mutate = False,
     ) -> Solid:
         """Shell
 
@@ -1293,13 +1299,13 @@ class Mixin3D:
         offset_builder.Build()
 
         try:
-            offset_occt_solid = offset_builder.Shape()
+            occt_shape = offset_builder.Shape()
         except (StdFail_NotDone, Standard_Failure) as err:
             raise RuntimeError(
                 "offset Error, an alternative kind may resolve this error"
             ) from err
 
-        offset_solid = self.__class__(offset_occt_solid)
+        offset_solid = self.update_object(occt_shape) if mutate else self.__class__(occt_shape)
 
         # The Solid can be inverted, if so reverse
         if offset_solid.volume < 0:
@@ -2589,19 +2595,30 @@ class Shape(NodeMixin):
         """Return has code"""
         return self.hash_code()
 
+    def update_shape(self, occt_shape: TopoDS_Shape) -> Self:
+        Shape.__init__(
+            self,
+            obj=occt_shape,
+            label=self.label,
+            color=self.color,
+            parent=self.parent,
+        )
+        return self
+
     def _bool_op(
         self,
         args: Iterable[Shape],
         tools: Iterable[Shape],
         operation: Union[BRepAlgoAPI_BooleanOperation, BRepAlgoAPI_Splitter],
+        mutate = False,
     ) -> Self:
         """Generic boolean operation
 
         Args:
-          args: Iterable[Shape]:
-          tools: Iterable[Shape]:
-          operation: Union[BRepAlgoAPI_BooleanOperation:
-          BRepAlgoAPI_Splitter]:
+            args: Iterable[Shape]:
+            tools: Iterable[Shape]:
+            operation: Union[BRepAlgoAPI_BooleanOperation, BRepAlgoAPI_Splitter]:
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
 
@@ -2621,18 +2638,23 @@ class Shape(NodeMixin):
         operation.SetRunParallel(True)
         operation.Build()
 
-        result = Shape.cast(operation.Shape())
+        occt_shape = operation.Shape()
+
+        if mutate:
+            return self.update_object(occt_shape)
+
+        result = Shape.cast(occt_shape)
 
         base = args[0] if isinstance(args, tuple) else args
         base.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
-
         return result
 
-    def cut(self, *to_cut: Shape) -> Self:
+    def cut(self, *to_cut: Shape, mutate=False) -> Self:
         """Remove the positional arguments from this Shape.
 
         Args:
-          *to_cut: Shape:
+            *to_cut (Shape): The shapes to cut.
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
 
@@ -2640,17 +2662,16 @@ class Shape(NodeMixin):
 
         cut_op = BRepAlgoAPI_Cut()
 
-        return self._bool_op((self,), to_cut, cut_op)
+        return self._bool_op((self,), to_cut, cut_op, mutate)
 
-    def fuse(self, *to_fuse: Shape, glue: bool = False, tol: float = None) -> Self:
-        """fuse
-
-        Fuse a sequence of shapes into a single shape.
+    def fuse(self, *to_fuse: Shape, glue: bool = False, tol: float = None, mutate = False) -> Self:
+        """Fuse a sequence of shapes into a single shape.
 
         Args:
-            to_fuse (sequence Shape): shapes to fuse
+            to_fuse (sequence Shape): The shapes to fuse.
             glue (bool, optional): performance improvement for some shapes. Defaults to False.
             tol (float, optional): tolerance. Defaults to None.
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
             Shape: fused shape
@@ -2662,7 +2683,7 @@ class Shape(NodeMixin):
         if tol:
             fuse_op.SetFuzzyValue(tol)
 
-        return_value = self._bool_op((self,), to_fuse, fuse_op)
+        return_value = self._bool_op((self,), to_fuse, fuse_op, mutate)
 
         return return_value
 
@@ -2674,12 +2695,12 @@ class Shape(NodeMixin):
         surfaces = [Face.make_plane(p) for p in planes]
         return self.intersect(*surfaces)
 
-    def intersect(self, *to_intersect: Union[Shape, Axis, Plane]) -> Shape:
+    def intersect(self, *to_intersect: Union[Shape, Axis, Plane], mutate = False) -> Shape:
         """Intersection of the arguments and this shape
 
         Args:
-            to_intersect (sequence of Union[Shape, Axis, Plane]): Shape(s) to
-                intersect with
+            to_intersect (sequence of Union[Shape, Axis, Plane]): Shape(s) to intersect with
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
             Shape: Resulting object may be of a different class than self
@@ -2701,7 +2722,7 @@ class Shape(NodeMixin):
 
         # Find the shape intersections
         intersect_op = BRepAlgoAPI_Common()
-        shape_intersections = self._bool_op((self,), objs, intersect_op)
+        shape_intersections = self._bool_op((self,), objs, intersect_op, mutate)
 
         return shape_intersections
 
@@ -4500,27 +4521,30 @@ class Compound(Mixin3D, Shape):
 
         return TopoDS_Iterator(self.wrapped).More()
 
-    def cut(self, *to_cut: Shape) -> Compound:
+    def cut(self, *to_cut: Shape, mutate = False) -> Compound:
         """Remove a shape from another one
 
         Args:
-          *to_cut: Shape:
+            *to_cut (Shape): The shapes to cut.
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
 
         """
 
         cut_op = BRepAlgoAPI_Cut()
+        shape = self._bool_op(self, to_cut, cut_op, mutate)
 
-        return tcast(Compound, self._bool_op(self, to_cut, cut_op))
+        return shape if mutate else tcast(Compound, shape)
 
-    def fuse(self, *to_fuse: Shape, glue: bool = False, tol: float = None) -> Compound:
+    def fuse(self, *to_fuse: Shape, glue: bool = False, tol: float = None, mutate = False) -> Compound:
         """Fuse shapes together
 
         Args:
-          *to_fuse: Shape:
-          glue: bool:  (Default value = False)
-          tol: float:  (Default value = None)
+            *to_fuse (Shape): The shapes to fuse.
+            glue: bool:  (Default value = False)
+            tol: float:  (Default value = None)
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
 
@@ -4537,26 +4561,28 @@ class Compound(Mixin3D, Shape):
         if len(args) <= 1:
             return_value: Shape = args[0]
         else:
-            return_value = self._bool_op(args[:1], args[1:], fuse_op)
+            return_value = self._bool_op(args[:1], args[1:], fuse_op, mutate)
 
         # fuse_op.RefineEdges()
         # fuse_op.FuseEdges()
 
-        return tcast(Compound, return_value)
+        return return_value if mutate else tcast(Compound, return_value)
 
-    def intersect(self, *to_intersect: Shape) -> Compound:
+    def intersect(self, *to_intersect: Shape, mutate = False) -> Compound:
         """Construct shape intersection
 
         Args:
-          *to_intersect: Shape:
+            *to_intersect (Shape): The shapes to intersect with.
+            mutate (bool, optional): True to modify and return the current object, False to return a new one.
 
         Returns:
 
         """
 
         intersect_op = BRepAlgoAPI_Common()
+        shape = self._bool_op(self, to_intersect, intersect_op, mutate)
 
-        return tcast(Compound, self._bool_op(self, to_intersect, intersect_op))
+        return shape if mutate else tcast(Compound, shape)
 
     def get_type(
         self,
