@@ -30,6 +30,7 @@ license:
 # pylint: disable=no-name-in-module, import-error
 # pylint: disable=too-many-lines
 
+from pathlib import Path
 import math
 import xml.etree.ElementTree as ET
 from enum import Enum, auto
@@ -633,14 +634,13 @@ class ExportDXF(Export2D):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def write(self, file_name: str):
+    def write(self, file_path: Path):
         """write
 
-        Writes the DXF data to the specified file name.
+        Writes the DXF data to the specified file path.
 
         Args:
-            file_name (str): The file name (including path) where the DXF data will
-                be written.
+            file_path (Path): The file path where the DXF data will be written.
         """
         # Reset the main CAD viewport of the model space to the
         # extents of its entities.
@@ -648,7 +648,7 @@ class ExportDXF(Export2D):
         # exposing viewport control to the user.
         zoom.extents(self._modelspace)
 
-        self._document.saveas(file_name)
+        self._document.saveas(str(file_path))
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -1428,7 +1428,7 @@ class ExportSVG(Export2D):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def write(self, path: str):
+    def write(self, file_path: Path):
         """write
 
         Writes the SVG data to the specified file path.
@@ -1478,4 +1478,4 @@ class ExportSVG(Export2D):
 
         xml = ET.ElementTree(svg)
         ET.indent(xml, "  ")
-        xml.write(path, encoding="utf-8", xml_declaration=True, default_namespace=False)
+        xml.write(file_path, encoding="utf-8", xml_declaration=True, default_namespace=False)

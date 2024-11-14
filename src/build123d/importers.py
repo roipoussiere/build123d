@@ -29,7 +29,6 @@ license:
 # pylint has trouble with the OCP imports
 # pylint: disable=no-name-in-module, import-error
 
-import os
 from math import degrees
 from pathlib import Path
 from typing import TextIO, Union, Optional
@@ -92,11 +91,11 @@ topods_lut = {
 }
 
 
-def import_brep(file_name: str) -> Shape:
+def import_brep(file_path: Path) -> Shape:
     """Import shape from a BREP file
 
     Args:
-        file_name (str): brep file
+        file_path (Path): brep file path
 
     Raises:
         ValueError: file not found
@@ -107,21 +106,21 @@ def import_brep(file_name: str) -> Shape:
     shape = TopoDS_Shape()
     builder = BRep_Builder()
 
-    BRepTools.Read_s(shape, file_name, builder)
+    BRepTools.Read_s(shape, str(file_path), builder)
 
     if shape.IsNull():
-        raise ValueError(f"Could not import {file_name}")
+        raise ValueError(f"Could not import {file_path}")
 
     return Shape.cast(shape)
 
 
-def import_step(filename: str) -> Compound:
+def import_step(file_path: Path) -> Compound:
     """import_step
 
     Extract shapes from a STEP file and return them as a Compound object.
 
     Args:
-        file_name (str): file path of STEP file to import
+        file_path (Path): STEP file path
 
     Raises:
         ValueError: can't open file
@@ -203,8 +202,8 @@ def import_step(filename: str) -> Compound:
             sub_shapes.append(sub_shape)
         return sub_shapes
 
-    if not os.path.exists(filename):
-        raise FileNotFoundError(filename)
+    if not Path(file_path).is_file():
+        raise FileNotFoundError(file_path)
 
     fmt = TCollection_ExtendedString("XCAF")
     doc = TDocStd_Document(fmt)
@@ -214,7 +213,7 @@ def import_step(filename: str) -> Compound:
     reader.SetNameMode(True)
     reader.SetColorMode(True)
     reader.SetLayerMode(True)
-    reader.ReadFile(filename)
+    reader.ReadFile(str(file_path))
     reader.Transfer(doc)
 
     root = Compound()
@@ -227,7 +226,7 @@ def import_step(filename: str) -> Compound:
     return root
 
 
-def import_stl(file_name: str) -> Face:
+def import_stl(file_path: Path) -> Face:
     """import_stl
 
     Extract shape from an STL file and return it as a Face reference object.
@@ -237,7 +236,7 @@ def import_stl(file_name: str) -> Face:
     of the STL file.
 
     Args:
-        file_name (str): file path of STL file to import
+        file_path (Path): STL file path
 
     Raises:
         ValueError: Could not import file
@@ -246,20 +245,20 @@ def import_stl(file_name: str) -> Face:
         Face: STL model
     """
     # Read and return the shape
-    reader = RWStl.ReadFile_s(file_name)
+    reader = RWStl.ReadFile_s(str(file_path))
     face = TopoDS_Face()
     BRep_Builder().MakeFace(face, reader)
     stl_obj = Face.cast(face)
     return stl_obj
 
 
-def import_svg_as_buildline_code(file_name: str) -> tuple[str, str]:
+def import_svg_as_buildline_code(file_path: Path) -> tuple[str, str]:
     """translate_to_buildline_code
 
     Translate the contents of the given svg file into executable build123d/BuildLine code.
 
     Args:
-        file_name (str): svg file name
+        file_path (Path): svg file path
 
     Returns:
         tuple[str, str]: code, builder instance name
@@ -280,10 +279,10 @@ def import_svg_as_buildline_code(file_name: str) -> tuple[str, str]:
             "sweep",
         ],
     }
-    paths_info = svg2paths(file_name)
+    file_path = Path(file_path)
+    paths_info = svg2paths(file_path)
     paths, _path_attributes = paths_info[0], paths_info[1]
-    builder_name = os.path.basename(file_name).split(".")[0]
-    builder_name = builder_name if builder_name.isidentifier() else "builder"
+    builder_name = file_path.stem if file_path.stem.isidentifier() else "builder"
     buildline_code = [
         "from build123d import *",
         f"with BuildLine() as {builder_name}:",

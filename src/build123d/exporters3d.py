@@ -30,6 +30,7 @@ license:
 # pylint: disable=no-name-in-module, import-error
 
 import warnings
+from pathlib import Path
 from io import BytesIO
 from typing import Union
 
@@ -153,25 +154,26 @@ def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
     return doc
 
 
-def export_brep(to_export: Shape, file_path: Union[str, BytesIO]) -> bool:
+def export_brep(to_export: Shape, file_path: Union[Path, BytesIO]) -> bool:
     """Export this shape to a BREP file
 
     Args:
         to_export (Shape): object or assembly
-        file_path: Union[str, BytesIO]: brep file path or memory buffer
+        file_path: Union[Path, BytesIO]: brep file path or memory buffer
 
     Returns:
         bool: write status
     """
 
-    return_value = BRepTools.Write_s(to_export.wrapped, file_path)
+    output = file_path if isinstance(file_path, BytesIO) else str(file_path)
+    return_value = BRepTools.Write_s(to_export.wrapped, output)
 
     return True if return_value is None else return_value
 
 
 def export_gltf(
     to_export: Shape,
-    file_path: str,
+    file_path: Path,
     unit: Unit = Unit.MM,
     binary: bool = False,
     linear_deflection: float = 0.001,
@@ -187,7 +189,7 @@ def export_gltf(
 
     Args:
         to_export (Shape): object or assembly
-        file_path (str): glTF file path
+        file_path (Path): glTF file path
         unit (Unit, optional): shape units. Defaults to Unit.MM.
         binary (bool, optional): output format. Defaults to False.
         linear_deflection (float, optional): A linear deflection setting which limits
@@ -223,7 +225,7 @@ def export_gltf(
 
     # Write the glTF file
     writer = RWGltf_CafWriter(
-        theFile=TCollection_AsciiString(file_path), theIsBinary=binary
+        theFile=TCollection_AsciiString(str(file_path)), theIsBinary=binary
     )
     writer.SetParallel(True)
     index_map = TColStd_IndexedDataMapOfStringString()
@@ -249,7 +251,7 @@ def export_gltf(
 
 def export_step(
     to_export: Shape,
-    file_path: str,
+    file_path: Path,
     unit: Unit = Unit.MM,
     write_pcurves: bool = True,
     precision_mode: PrecisionMode = PrecisionMode.AVERAGE,
@@ -262,7 +264,7 @@ def export_step(
 
     Args:
         to_export (Shape): object or assembly
-        file_path (str): step file path
+        file_path (Path): step file path
         unit (Unit, optional): shape units. Defaults to Unit.MM.
         write_pcurves (bool, optional): write parametric curves to the STEP file.
             Defaults to True.
@@ -308,7 +310,7 @@ def export_step(
     Interface_Static.SetIVal_s("write.precision.mode", precision_mode.value)
     writer.Transfer(doc, STEPControl_StepModelType.STEPControl_AsIs)
 
-    status = writer.Write(file_path) == IFSelect_ReturnStatus.IFSelect_RetDone
+    status = writer.Write(str(file_path)) == IFSelect_ReturnStatus.IFSelect_RetDone
     if not status:
         raise RuntimeError("Failed to write STEP file")
 
@@ -317,7 +319,7 @@ def export_step(
 
 def export_stl(
     to_export: Shape,
-    file_path: str,
+    file_path: Path,
     tolerance: float = 1e-3,
     angular_tolerance: float = 0.1,
     ascii_format: bool = False,
@@ -328,7 +330,7 @@ def export_stl(
 
     Args:
         to_export (Shape): object or assembly
-        file_path (str): The path and file name to write the STL output to.
+        file_path (Path): The path and file name to write the STL output to.
         tolerance (float, optional): A linear deflection setting which limits the distance
             between a curve and its tessellation. Setting this value too low will result in
             large meshes that can consume computing resources. Setting the value too high can
@@ -354,4 +356,4 @@ def export_stl(
     else:
         writer.ASCIIMode = False
 
-    return writer.Write(to_export.wrapped, file_path)
+    return writer.Write(to_export.wrapped, str(file_path))
